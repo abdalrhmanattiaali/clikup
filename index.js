@@ -173,22 +173,19 @@ async function processAndSendBatchNotifications() {
                 userBlock += `\n✅ *تم إسناد ${activity.task_assigned.length} ${activity.task_assigned.length > 1 ? 'مهام' : 'مهمة'} إلى ${userName}:*\n${assignedContent}`;
             }
 
-            // ✨ IMPROVED: Better completion notifications with parent task info
+            // ✨ IMPROVED: Better completion notifications without links (no preview)
             for (const [parentId, group] of completedGroups.entries()) {
                 if (parentId === 'independent') {
                     for (const item of group.children) {
-                        const shortUrl = await shortenUrl(`https://app.clickup.com/t/${item.task.id}`);
                         const completedBy = item.data.updaterName ? ` ✓ بواسطة: ${item.data.updaterName}` : '';
-                        completedContent += `- ${item.task.name}${completedBy} 🔗 ${shortUrl}\n`;
+                        completedContent += `- ${item.task.name}${completedBy}\n`;
                     }
                 } else {
                     const parentName = group.parentTask?.name || 'مهمة رئيسية';
-                    const parentUrl = group.parentTask ? await shortenUrl(`https://app.clickup.com/t/${group.parentTask.id}`) : '';
-                    completedContent += `\n  *تابعة للمهمة: ${parentName}* ${parentUrl ? `🔗 ${parentUrl}` : ''}\n`;
+                    completedContent += `\n  *تابعة للمهمة: ${parentName}*\n`;
                     for (const item of group.children) {
-                        const shortUrl = await shortenUrl(`https://app.clickup.com/t/${item.task.id}`);
                         const completedBy = item.data.updaterName ? ` ✓ بواسطة: ${item.data.updaterName}` : '';
-                        completedContent += `    ◦ ${item.task.name}${completedBy} 🔗 ${shortUrl}\n`;
+                        completedContent += `    ◦ ${item.task.name}${completedBy}\n`;
                     }
                 }
             }
@@ -306,9 +303,8 @@ async function saveProductivityData(data) {
 
         productivityData.push(data);
 
-        // Keep only last 90 days of data
-        const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
-        productivityData = productivityData.filter(d => d.timestamp > ninetyDaysAgo);
+        // ✅ Keep all data forever - no deletion
+        // Removed 90-day limit to preserve all productivity history
 
         await fs.writeFile(PRODUCTIVITY_DATA_FILE, JSON.stringify(productivityData, null, 2));
     } catch (error) {

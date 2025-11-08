@@ -43,9 +43,8 @@ async function saveProductivityDataEnhanced(data, task) {
 
         productivityData.push(enhancedData);
 
-        // Keep only last 90 days of data
-        const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
-        productivityData = productivityData.filter(d => d.timestamp > ninetyDaysAgo);
+        // ✅ Keep all data forever - no deletion
+        // Removed 90-day limit to preserve all productivity history
 
         await fs.writeFile(PRODUCTIVITY_DATA_FILE, JSON.stringify(productivityData, null, 2));
 
