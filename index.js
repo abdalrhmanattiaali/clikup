@@ -1346,6 +1346,7 @@ client.on('ready', async () => {
     const group = chats.find(c => c.isGroup && c.name === 'Click Up notification 📢');
     if (group) {
         GROUP_CHAT_ID = group.id._serialized;
+        global.GROUP_CHAT_ID = GROUP_CHAT_ID; // Make accessible for dashboard API
         console.log(`📢 Group chat found: ${group.name} (${GROUP_CHAT_ID})`);
         await cleanAndSendMessage(GROUP_CHAT_ID, '🚀 Bot connected with enhanced AI-powered motivation system! 🎯');
     } else {
@@ -1353,7 +1354,16 @@ client.on('ready', async () => {
     }
 });
 
+// ========================= Dashboard API Integration ========================= //
+const { addDashboardEndpoints } = require('./dashboard-api');
+addDashboardEndpoints(app);
+
 // ========================= Start Server ========================= //
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
 });
+
+// ========================= Exports ========================= //
+module.exports = {
+    cleanAndSendMessage
+};
