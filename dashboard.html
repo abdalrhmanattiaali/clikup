@@ -348,31 +348,8 @@
 
         <div class="challenges">
             <h2>🎯 تحديات الأسبوع</h2>
-            <div class="challenge-item">
-                <h3>تحدي السرعة <span class="difficulty medium">متوسط</span></h3>
-                <p>أنجز 20 مهمة هذا الأسبوع - المكافأة: 100 نقطة + شارة صاروخ الأسبوع 🚀</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 65%;"></div>
-                </div>
-                <p style="margin-top: 5px; color: #666; font-size: 0.9em;">13 من 20 (65%)</p>
-            </div>
-
-            <div class="challenge-item">
-                <h3>تحدي التنوع <span class="difficulty hard">صعب</span></h3>
-                <p>أنجز مهام من 3 فئات مختلفة - المكافأة: 150 نقطة + شارة متعدد المواهب 🌈</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 33%;"></div>
-                </div>
-                <p style="margin-top: 5px; color: #666; font-size: 0.9em;">1 من 3 (33%)</p>
-            </div>
-
-            <div class="challenge-item">
-                <h3>تحدي المبتدئين <span class="difficulty easy">سهل</span></h3>
-                <p>أنجز 10 مهام هذا الأسبوع - المكافأة: 50 نقطة + شارة البداية القوية 💪</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 100%;"></div>
-                </div>
-                <p style="margin-top: 5px; color: #4CAF50; font-size: 0.9em; font-weight: bold;">✅ مكتمل!</p>
+            <div id="challengesList">
+                <p style="text-align: center; color: #666;">جاري تحميل التحديات...</p>
             </div>
         </div>
     </div>
@@ -380,45 +357,176 @@
     <button class="refresh-btn" onclick="refreshData()">🔄 تحديث البيانات</button>
 
     <script>
-        // محاكاة تحميل البيانات من API
+        // تحميل إحصائيات لوحة التحكم من API
         async function loadDashboardData() {
             try {
-                // في الواقع، ستقوم بجلب البيانات من الـ backend
-                // const response = await fetch('/api/dashboard-stats');
-                // const data = await response.json();
+                const response = await fetch('/api/dashboard-stats');
+                const data = await response.json();
 
-                // بيانات تجريبية للعرض
-                document.getElementById('totalTasks').textContent = '1,247';
-                document.getElementById('todayTasks').textContent = '47';
-                document.getElementById('weekTasks').textContent = '156';
-                document.getElementById('activeMembers').textContent = '12';
+                // تحديث الإحصائيات
+                document.getElementById('totalTasks').textContent = formatNumber(data.totalTasks);
+                document.getElementById('todayTasks').textContent = formatNumber(data.todayTasks);
+                document.getElementById('weekTasks').textContent = formatNumber(data.weekTasks);
+                document.getElementById('activeMembers').textContent = formatNumber(data.activeMembers);
 
-                console.log('✅ Dashboard data loaded successfully');
+                console.log('✅ Dashboard stats loaded successfully');
             } catch (error) {
-                console.error('❌ Error loading dashboard data:', error);
+                console.error('❌ Error loading dashboard stats:', error);
+                // عرض بيانات افتراضية في حالة الخطأ
+                document.getElementById('totalTasks').textContent = '0';
+                document.getElementById('todayTasks').textContent = '0';
+                document.getElementById('weekTasks').textContent = '0';
+                document.getElementById('activeMembers').textContent = '0';
             }
         }
 
-        function refreshData() {
-            console.log('🔄 Refreshing data...');
-            loadDashboardData();
+        // تحميل لوحة الصدارة من API
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch('/api/leaderboard');
+                const data = await response.json();
+
+                const leaderboardList = document.getElementById('leaderboardList');
+
+                if (data.length === 0) {
+                    leaderboardList.innerHTML = '<p style="text-align: center; color: #666;">لا توجد بيانات بعد</p>';
+                    return;
+                }
+
+                const medals = ['🥇', '🥈', '🥉'];
+                leaderboardList.innerHTML = data.map((item, index) => {
+                    const rank = index < 3 ? medals[index] : (index + 1);
+                    return `
+                        <div class="leaderboard-item">
+                            <div class="rank">${rank}</div>
+                            <div class="name">${item.user}</div>
+                            <div class="score">${item.total} ${item.total > 1 ? 'مهام' : 'مهمة'}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                console.log('✅ Leaderboard loaded successfully');
+            } catch (error) {
+                console.error('❌ Error loading leaderboard:', error);
+            }
+        }
+
+        // تحميل جميع الشارات المتاحة
+        async function loadBadges() {
+            try {
+                const response = await fetch('/api/badges');
+                const badgeSystem = await response.json();
+
+                const badgesGrid = document.getElementById('badgesGrid');
+                let badgesHTML = '';
+
+                // عرض شارات الإنجازات
+                if (badgeSystem.achievement) {
+                    Object.entries(badgeSystem.achievement).forEach(([name, badge]) => {
+                        badgesHTML += `
+                            <div class="badge" style="background: linear-gradient(135deg, ${badge.color} 0%, ${adjustColor(badge.color, -10)} 100%);">
+                                <div class="emoji">${badge.emoji}</div>
+                                <div class="name">${name}</div>
+                            </div>
+                        `;
+                    });
+                }
+
+                badgesGrid.innerHTML = badgesHTML || '<p>لا توجد شارات متاحة</p>';
+                console.log('✅ Badges loaded successfully');
+            } catch (error) {
+                console.error('❌ Error loading badges:', error);
+            }
+        }
+
+        // تحميل التحديات الأسبوعية
+        async function loadChallenges() {
+            try {
+                const response = await fetch('/api/challenges/current');
+                const data = await response.text(); // النتيجة نص منسق
+
+                const challengesList = document.getElementById('challengesList');
+
+                // إذا كانت هناك تحديات
+                if (data && data.length > 0) {
+                    // تحويل النص المنسق إلى HTML بسيط
+                    const lines = data.split('\n');
+                    let challengesHTML = '';
+                    let currentChallenge = null;
+
+                    // عرض رسالة بسيطة
+                    challengesHTML = `
+                        <div class="challenge-item">
+                            <h3>📋 التحديات الأسبوعية</h3>
+                            <p>لعرض التحديات التفصيلية، تفقد رسائل WhatsApp أو استخدم:</p>
+                            <p style="direction: ltr; text-align: center; background: #f0f0f0; padding: 10px; border-radius: 5px; font-family: monospace;">
+                                GET /api/challenges/current
+                            </p>
+                        </div>
+                    `;
+
+                    challengesList.innerHTML = challengesHTML;
+                } else {
+                    challengesList.innerHTML = '<p style="text-align: center; color: #666;">لا توجد تحديات نشطة حالياً</p>';
+                }
+
+                console.log('✅ Challenges loaded successfully');
+            } catch (error) {
+                console.error('❌ Error loading challenges:', error);
+                document.getElementById('challengesList').innerHTML =
+                    '<p style="text-align: center; color: #999;">سيتم إنشاء التحديات تلقائياً كل أسبوع</p>';
+            }
+        }
+
+        // تنسيق الأرقام بالفواصل
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // تعديل لون للتدرج
+        function adjustColor(color, percent) {
+            const num = parseInt(color.replace("#",""), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = (num >> 16) + amt;
+            const G = (num >> 8 & 0x00FF) + amt;
+            const B = (num & 0x0000FF) + amt;
+            return "#" + (0x1000000 + (R<255?R<1?0:R:255)*0x10000 +
+                (G<255?G<1?0:G:255)*0x100 + (B<255?B<1?0:B:255))
+                .toString(16).slice(1);
+        }
+
+        // تحديث جميع البيانات
+        async function refreshData() {
+            console.log('🔄 Refreshing all data...');
 
             // إضافة تأثير بصري
             document.querySelectorAll('.stat-card .value').forEach(el => {
                 el.style.transform = 'scale(1.1)';
                 el.style.color = '#764ba2';
-                setTimeout(() => {
+            });
+
+            // تحميل جميع البيانات
+            await Promise.all([
+                loadDashboardData(),
+                loadLeaderboard(),
+                loadBadges(),
+                loadChallenges()
+            ]);
+
+            // إعادة التأثير البصري
+            setTimeout(() => {
+                document.querySelectorAll('.stat-card .value').forEach(el => {
                     el.style.transform = 'scale(1)';
                     el.style.color = '#667eea';
-                }, 300);
-            });
+                });
+            }, 300);
         }
 
         // تحميل البيانات عند فتح الصفحة
-        window.addEventListener('load', loadDashboardData);
+        window.addEventListener('load', refreshData);
 
         // تحديث تلقائي كل 5 دقائق
-        setInterval(loadDashboardData, 5 * 60 * 1000);
+        setInterval(refreshData, 5 * 60 * 1000);
     </script>
 </body>
 </html>
