@@ -1,11 +1,13 @@
 // ========================= ENHANCED MOTIVATION SYSTEM ========================= //
 // نظام التحفيز المتقدم مع تحليل المهام وترشيح الكورسات
 
+require('dotenv').config();
+
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
 
-const CLAUDE_API_KEY = "sk-ant-api03-YOUR-API-KEY-HERE";
+const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || "sk-ant-api03-YOUR-API-KEY-HERE";
 const ACHIEVEMENTS_FILE = path.join(__dirname, 'achievements.json');
 const COURSES_DATA_FILE = path.join(__dirname, 'course_recommendations.json');
 

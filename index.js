@@ -1,3 +1,6 @@
+// ========================= Load Environment Variables ========================= //
+require('dotenv').config();
+
 const express = require('express');
 const axios = require('axios');
 const cron = require('node-cron');
@@ -8,7 +11,7 @@ const { initializeScheduler } = require('./src/scheduler');
 const TEAM = require('./src/team');
 
 const app = express();
-const PORT = 5014;
+const PORT = process.env.PORT || 5014;
 
 axios.defaults.timeout = 60000;
 
@@ -18,9 +21,9 @@ initializeWhatsApp();
 initializeScheduler();
 const client = getClient();
 
-const CLICKUP_TOKEN = 'pk_62585187_VZCCTKCU9501T8G8KJHVGT9FSXPVTU11';
-const CLICKUP_TEAM_ID = '9015343430';
-const SAMPLE_LIST_ID = '901515500888';
+const CLICKUP_TOKEN = process.env.CLICKUP_TOKEN || 'pk_62585187_VZCCTKCU9501T8G8KJHVGT9FSXPVTU11';
+const CLICKUP_TEAM_ID = process.env.CLICKUP_TEAM_ID || '9015343430';
+const SAMPLE_LIST_ID = process.env.CLICKUP_LIST_ID || '901515500888';
 
 const NON_OPEN_STATUSES = [
     'complete',
@@ -1343,14 +1346,15 @@ cron.schedule('15 9 * * *', () => sendInspirationalContent(), { timezone: 'Afric
 client.on('ready', async () => {
     console.log('✅ WhatsApp Ready');
     const chats = await client.getChats();
-    const group = chats.find(c => c.isGroup && c.name === 'Click Up notification 📢');
+    const groupName = process.env.WHATSAPP_GROUP_NAME || 'Click Up notification 📢';
+    const group = chats.find(c => c.isGroup && c.name === groupName);
     if (group) {
         GROUP_CHAT_ID = group.id._serialized;
         global.GROUP_CHAT_ID = GROUP_CHAT_ID; // Make accessible for dashboard API
         console.log(`📢 Group chat found: ${group.name} (${GROUP_CHAT_ID})`);
         await cleanAndSendMessage(GROUP_CHAT_ID, '🚀 Bot connected with enhanced AI-powered motivation system! 🎯');
     } else {
-        console.warn("⚠️ Group 'Click Up notification 📢' not found.");
+        console.warn(`⚠️ Group '${groupName}' not found.`);
     }
 });
 

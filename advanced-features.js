@@ -1,11 +1,13 @@
 // ========================= ADVANCED FEATURES - ULTRA POWERFUL SYSTEM ========================= //
 // الميزات المتقدمة: كورسات عربية، شارات، تحديات، AI Coach، لوحة تحكم
 
+require('dotenv').config();
+
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
 
-const CLAUDE_API_KEY = "sk-ant-api03-YOUR-API-KEY-HERE";
+const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || "sk-ant-api03-YOUR-API-KEY-HERE";
 const BADGES_FILE = path.join(__dirname, 'badges.json');
 const CHALLENGES_FILE = path.join(__dirname, 'challenges.json');
 const MONTHLY_REPORTS_FILE = path.join(__dirname, 'monthly_reports.json');
