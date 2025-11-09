@@ -1321,6 +1321,72 @@ app.post('/sample-request-webhook', async (req, res) => {
     }
 });
 
+// ========================= Webhook Test Endpoints ========================= //
+// نقاط اختبار للتأكد من أن السيرفر شغّال و webhooks تعمل
+
+// اختبار بسيط - GET
+app.get('/webhook-test', (req, res) => {
+    res.json({
+        status: 'ok',
+        message: '✅ السيرفر شغّال والـ webhook endpoints جاهزة!',
+        timestamp: new Date().toISOString(),
+        endpoints: {
+            'GET /webhook-test': 'اختبار بسيط (أنت هنا)',
+            'GET /task-updated-webhook': 'معلومات عن webhook',
+            'POST /task-updated-webhook': 'استقبال تحديثات المهام من ClickUp',
+            'POST /task-created-webhook': 'استقبال مهام جديدة',
+            'POST /task-comment-webhook': 'استقبال تعليقات'
+        },
+        server_info: {
+            port: PORT,
+            whatsapp_connected: !!GROUP_CHAT_ID,
+            group_id: GROUP_CHAT_ID || 'غير متصل'
+        }
+    });
+});
+
+// معلومات عن webhook - GET
+app.get('/task-updated-webhook', (req, res) => {
+    res.json({
+        endpoint: 'POST /task-updated-webhook',
+        description: 'نقطة وصول webhook لاستقبال تحديثات المهام من ClickUp',
+        method: 'POST',
+        status: '✅ جاهز',
+        expected_data: {
+            task_id: 'معرّف المهمة',
+            history_items: [
+                {
+                    field: 'نوع التغيير (status, assignee, priority, etc)',
+                    before: 'القيمة قبل التغيير',
+                    after: 'القيمة بعد التغيير',
+                    user: {
+                        username: 'اسم المستخدم'
+                    }
+                }
+            ]
+        },
+        usage: 'استخدم POST request من ClickUp webhooks فقط',
+        test_endpoint: 'استخدم GET /webhook-test للتأكد من أن السيرفر شغّال',
+        server_status: {
+            running: true,
+            whatsapp_connected: !!GROUP_CHAT_ID,
+            ai_enabled: !!process.env.ANTHROPIC_API_KEY,
+            timestamp: new Date().toISOString()
+        }
+    });
+});
+
+// معلومات عن webhook - GET
+app.get('/task-created-webhook', (req, res) => {
+    res.json({
+        endpoint: 'POST /task-created-webhook',
+        description: 'نقطة وصول webhook لاستقبال مهام جديدة من ClickUp',
+        method: 'POST',
+        status: '✅ جاهز',
+        usage: 'استخدم POST request من ClickUp webhooks فقط'
+    });
+});
+
 // ========================= ClickUp Webhooks (REFACTORED) ========================= //
 app.post('/task-created-webhook', async (req, res) => {
     try {
