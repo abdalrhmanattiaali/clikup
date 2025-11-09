@@ -1046,6 +1046,25 @@ app.get('/test-daily-report-group', async (_req, res) => {
     }
 });
 
+// تشخيص حالات المهام
+app.get('/debug/status-check/:status', async (req, res) => {
+    try {
+        const testStatus = req.params.status;
+        const lowercaseStatus = testStatus.toLowerCase().trim();
+        const isComplete = NON_OPEN_STATUSES.includes(lowercaseStatus);
+
+        res.json({
+            originalStatus: testStatus,
+            lowercaseStatus: lowercaseStatus,
+            isComplete: isComplete,
+            supportedStatuses: NON_OPEN_STATUSES,
+            message: isComplete ? '✅ هذه الحالة مكتملة' : '❌ هذه الحالة ليست مكتملة'
+        });
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
 app.get('/test-ai-morning/:user', async (req, res) => {
     try { await sendAIMorning(req.params.user); res.send(`✅ AI Morning sent to @${req.params.user}`); }
     catch (e) { res.status(500).send(e.message); }
@@ -1275,11 +1294,21 @@ app.post('/task-updated-webhook', async (req, res) => {
             case 'status': {
                 const beforeStatus = historyItem.before?.status || 'غير محدد';
                 const afterStatus = task.status?.status || 'غير محدد';
+
+                // تسجيل الحالة للتشخيص
+                console.log('📊 Status Change Detected:');
+                console.log('   Before:', beforeStatus);
+                console.log('   After:', afterStatus);
+                console.log('   After (lowercase):', afterStatus.toLowerCase().trim());
+                console.log('   Is Complete?:', NON_OPEN_STATUSES.includes(afterStatus.toLowerCase().trim()));
+
                 const isComplete = NON_OPEN_STATUSES.includes(afterStatus.toLowerCase().trim());
 
                 if (isComplete) {
+                    console.log('✅ Task marked as COMPLETE - sending notification');
                     await createTaskCompletionNotification(task, updaterName);
                 } else {
+                    console.log('📝 Status changed but NOT complete');
                     addNotificationToQueue({
                         type: 'status_changed',
                         task: task,
