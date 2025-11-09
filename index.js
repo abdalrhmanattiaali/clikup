@@ -16,7 +16,8 @@ const PORT = process.env.PORT || 5014;
 
 axios.defaults.timeout = 60000;
 
-app.use(express.raw({ type: 'application/json' }));
+// Parse JSON في الـ webhooks
+app.use(express.json());
 
 initializeWhatsApp();
 initializeScheduler();
@@ -1251,7 +1252,7 @@ app.get('/test-analytics/:user?', async (req, res) => {
 // ========================= ERPNext Webhook ========================= //
 app.post('/sample-request-webhook', async (req, res) => {
     try {
-        const body = JSON.parse(req.body.toString('utf8'));
+        const body = req.body;
         const { customer, items, requestNo } = body;
 
         const mainTaskPayload = {
@@ -1390,7 +1391,9 @@ app.get('/task-created-webhook', (req, res) => {
 // ========================= ClickUp Webhooks (REFACTORED) ========================= //
 app.post('/task-created-webhook', async (req, res) => {
     try {
-        const body = JSON.parse(req.body.toString('utf8'));
+        console.log('📥 Task Created Webhook:', JSON.stringify(req.body, null, 2).substring(0, 300));
+
+        const body = req.body;
         const taskId = body.task_id || body.payload?.id;
         const task = await getTaskDetails(taskId);
         if (!task) return res.status(404).send('Task not found.');
@@ -1417,7 +1420,15 @@ app.post('/task-created-webhook', async (req, res) => {
 
 app.post('/task-updated-webhook', async (req, res) => {
     try {
-        const body = JSON.parse(req.body.toString('utf8'));
+        // تسجيل البيانات الواردة من ClickUp للتشخيص
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📥 Webhook received from ClickUp');
+        console.log('   Content-Type:', req.headers['content-type']);
+        console.log('   Body type:', typeof req.body);
+        console.log('   Body:', JSON.stringify(req.body, null, 2).substring(0, 500));
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        const body = req.body;
         const taskId = body.task_id || body.payload?.id;
         const historyItem = body.history_items?.[0];
 
@@ -1442,10 +1453,12 @@ app.post('/task-updated-webhook', async (req, res) => {
 
         switch (historyItem.field) {
             case 'status':
+                // ✅ نقرأ من webhook مباشرة
                 beforeValue = historyItem.before?.status || 'غير محدد';
-                afterValue = task.status?.status || 'غير محدد';
+                afterValue = historyItem.after?.status || task.status?.status || 'غير محدد';
                 console.log('   Before:', beforeValue);
                 console.log('   After:', afterValue);
+                console.log('   Source: webhook.after.status');
                 break;
 
             case 'assignee':
@@ -1461,17 +1474,21 @@ app.post('/task-updated-webhook', async (req, res) => {
                 break;
 
             case 'priority':
+                // ✅ نقرأ من webhook مباشرة
                 beforeValue = historyItem.before?.priority;
-                afterValue = task.priority?.priority;
+                afterValue = historyItem.after?.priority || task.priority?.priority;
                 console.log('   Priority Before:', beforeValue);
                 console.log('   Priority After:', afterValue);
+                console.log('   Source: webhook.after.priority');
                 break;
 
             case 'due_date':
+                // ✅ نقرأ من webhook مباشرة
                 beforeValue = historyItem.before?.due_date;
-                afterValue = task.due_date;
+                afterValue = historyItem.after?.due_date || task.due_date;
                 console.log('   Due Date Before:', beforeValue || 'لا يوجد');
                 console.log('   Due Date After:', afterValue || 'لا يوجد');
+                console.log('   Source: webhook.after.due_date');
                 break;
 
             case 'description':
@@ -1481,16 +1498,20 @@ app.post('/task-updated-webhook', async (req, res) => {
                 break;
 
             case 'name':
-                beforeValue = historyItem.before?.name || 'غير معروف';
-                afterValue = task.name;
+                // ✅ نقرأ من webhook مباشرة
+                beforeValue = historyItem.before || 'غير معروف';
+                afterValue = historyItem.after || task.name;
                 console.log('   Name Before:', beforeValue);
                 console.log('   Name After:', afterValue);
+                console.log('   Source: webhook.after (name)');
                 break;
 
             default:
                 beforeValue = JSON.stringify(historyItem.before);
                 afterValue = JSON.stringify(historyItem.after || 'تحديث');
                 console.log('   Generic field update');
+                console.log('   Before:', beforeValue?.substring(0, 100));
+                console.log('   After:', afterValue?.substring(0, 100));
         }
 
         // إرسال للـ AI لتوليد إشعار ذكي
@@ -1515,7 +1536,9 @@ app.post('/task-updated-webhook', async (req, res) => {
 
 app.post('/task-comment-webhook', async (req, res) => {
     try {
-        const body = JSON.parse(req.body.toString('utf8'));
+        console.log('📥 Task Comment Webhook:', JSON.stringify(req.body, null, 2).substring(0, 300));
+
+        const body = req.body;
         const taskId = body.task_id;
         if (!taskId) return res.send('ok (no task id)');
 
