@@ -25,11 +25,16 @@ const CLICKUP_TOKEN = process.env.CLICKUP_TOKEN || 'pk_62585187_VZCCTKCU9501T8G8
 const CLICKUP_TEAM_ID = process.env.CLICKUP_TEAM_ID || '9015343430';
 const SAMPLE_LIST_ID = process.env.CLICKUP_LIST_ID || '901515500888';
 
-// حالات المهام المكتملة
-// ملاحظة: ClickUp يرسل الحالات بحروف كبيرة (COMPLETE)
-// لكن الكود يحولها لحروف صغيرة قبل المقارنة (.toLowerCase())
+// ========================= حالات المهام المكتملة ========================= //
+// ملاحظة مهمة: ClickUp يرسل الحالات بحروف كبيرة (مثل: COMPLETE)
+// لكن الكود يحولها تلقائياً لحروف صغيرة قبل المقارنة (.toLowerCase())
+// لذلك نضيف الحالات بحروف صغيرة فقط في هذه القائمة
+
 const NON_OPEN_STATUSES = [
-    'complete',
+    // الحالة الأساسية من ClickUp
+    'complete',              // ← الحالة الرئيسية - COMPLETE → complete
+
+    // حالات إضافية شائعة
     'completed',
     'complete & not invoiced',
     'closed',
@@ -37,11 +42,17 @@ const NON_OPEN_STATUSES = [
     'cancelled',
     'done',
     'finished',
+
+    // حالات عربية
     'مكتمل',
     'منتهي',
     'مغلق',
     'ملغي'
 ];
+
+// طباعة الحالات المدعومة عند بدء التشغيل
+console.log('✅ Supported completion statuses:', NON_OPEN_STATUSES.length, 'statuses');
+console.log('   Including: complete, completed, done, finished, closed, etc.');
 
 const PROMPTS_FILE = path.join(__dirname, 'prompts.txt');
 const MEMORY_FILE = path.join(__dirname, 'memory.log');
@@ -1296,19 +1307,29 @@ app.post('/task-updated-webhook', async (req, res) => {
                 const afterStatus = task.status?.status || 'غير محدد';
 
                 // تسجيل الحالة للتشخيص
-                console.log('📊 Status Change Detected:');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log('📊 Status Change Detected for task:', task.name);
+                console.log('   Task ID:', task.id);
+                console.log('   Changed by:', updaterName);
                 console.log('   Before:', beforeStatus);
-                console.log('   After:', afterStatus);
+                console.log('   After (original):', afterStatus);
                 console.log('   After (lowercase):', afterStatus.toLowerCase().trim());
-                console.log('   Is Complete?:', NON_OPEN_STATUSES.includes(afterStatus.toLowerCase().trim()));
 
-                const isComplete = NON_OPEN_STATUSES.includes(afterStatus.toLowerCase().trim());
+                const normalizedStatus = afterStatus.toLowerCase().trim();
+                const isComplete = NON_OPEN_STATUSES.includes(normalizedStatus);
+
+                console.log('   🔍 Checking if complete...');
+                console.log('   Normalized status:', `"${normalizedStatus}"`);
+                console.log('   Is in NON_OPEN_STATUSES?:', isComplete);
 
                 if (isComplete) {
-                    console.log('✅ Task marked as COMPLETE - sending notification');
+                    console.log('   ✅ STATUS IS COMPLETE!');
+                    console.log('   → Sending completion notification...');
                     await createTaskCompletionNotification(task, updaterName);
+                    console.log('   ✅ Completion notification sent successfully!');
                 } else {
-                    console.log('📝 Status changed but NOT complete');
+                    console.log('   ⚠️  Status changed but NOT a completion status');
+                    console.log('   → Adding to status change queue...');
                     addNotificationToQueue({
                         type: 'status_changed',
                         task: task,
@@ -1320,6 +1341,7 @@ app.post('/task-updated-webhook', async (req, res) => {
                         }
                     });
                 }
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
                 break;
             }
             default:
