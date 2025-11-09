@@ -9,6 +9,7 @@ const path = require('path');
 const { initializeWhatsApp, sendMessage, getClient } = require('./src/whatsapp');
 const { initializeScheduler } = require('./src/scheduler');
 const TEAM = require('./src/team');
+const { generateSmartNotification, generateCompletionNotification } = require('./ai-notifications');
 
 const app = express();
 const PORT = process.env.PORT || 5014;
@@ -312,6 +313,77 @@ async function createTaskCompletionNotification(task, updaterName) {
             assignees: getAssigneeTags(task)
         }
     });
+}
+
+// ========================= AI Smart Notifications ========================= //
+/**
+ * إنشاء إشعار ذكي باستخدام AI لأي تغيير في المهمة
+ * @param {Object} task - بيانات المهمة
+ * @param {Object} change - معلومات التغيير
+ * @param {string} change.field - نوع التغيير
+ * @param {any} change.before - القيمة قبل التغيير
+ * @param {any} change.after - القيمة بعد التغيير
+ * @param {string} change.userName - اسم المستخدم
+ */
+async function createAISmartNotification(task, change) {
+    if (!task) {
+        console.log("Cannot create AI notification: task is null");
+        return;
+    }
+
+    console.log(`🤖 Creating AI-powered notification for task: "${task.name}"`);
+    console.log(`   Change type: ${change.field}`);
+    console.log(`   Changed by: ${change.userName}`);
+
+    try {
+        // جلب المهمة الرئيسية إذا كانت فرعية
+        let parentTask = null;
+        if (task.parent) {
+            try {
+                parentTask = await getTaskDetails(task.parent);
+            } catch (error) {
+                console.log('Could not fetch parent task:', error.message);
+            }
+        }
+
+        // توليد الإشعار باستخدام AI
+        const aiNotification = await generateSmartNotification(task, change, parentTask);
+
+        // حفظ البيانات للإحصائيات
+        await saveProductivityData({
+            type: `task_${change.field}_changed`,
+            taskId: task.id,
+            taskName: task.name,
+            userId: change.userName,
+            timestamp: Date.now(),
+            field: change.field,
+            before: change.before,
+            after: change.after
+        });
+
+        // إرسال الإشعار مباشرة (لا نضيفه للqueue للحصول على رد فوري)
+        if (GROUP_CHAT_ID) {
+            await cleanAndSendMessage(GROUP_CHAT_ID, aiNotification);
+            console.log('✅ AI notification sent successfully');
+        } else {
+            console.warn('⚠️  GROUP_CHAT_ID not set, notification not sent');
+        }
+
+    } catch (error) {
+        console.error('❌ AI notification failed:', error.message);
+
+        // fallback: إضافة إلى queue بدون AI
+        addNotificationToQueue({
+            type: `${change.field}_changed`,
+            task: task,
+            data: {
+                updaterName: change.userName,
+                before: change.before,
+                after: change.after,
+                assignees: getAssigneeTags(task)
+            }
+        });
+    }
 }
 
 // ========================= Productivity Analytics System ========================= //
@@ -1289,65 +1361,85 @@ app.post('/task-updated-webhook', async (req, res) => {
 
         const updaterName = historyItem.user?.username || 'غير معروف';
 
+        // ========================= AI-Powered Notification System ========================= //
+        // نظام جديد: AI يفهم ويكتب إشعار لأي تغيير في المهمة
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📊 Task Update Detected');
+        console.log('   Task:', task.name);
+        console.log('   Task ID:', task.id);
+        console.log('   Changed by:', updaterName);
+        console.log('   Field changed:', historyItem.field);
+
+        // استخراج القيم قبل وبعد التغيير حسب نوع الحقل
+        let beforeValue, afterValue;
+
         switch (historyItem.field) {
-            case 'assignee': {
-                addNotificationToQueue({
-                    type: 'assignee_changed',
-                    task: task,
-                    data: {
-                        updaterName: updaterName,
-                        assignees: getAssigneeTags(task)
-                    }
-                });
-                await sendDirectAssignmentNotification(task);
+            case 'status':
+                beforeValue = historyItem.before?.status || 'غير محدد';
+                afterValue = task.status?.status || 'غير محدد';
+                console.log('   Before:', beforeValue);
+                console.log('   After:', afterValue);
                 break;
-            }
-            case 'status': {
-                const beforeStatus = historyItem.before?.status || 'غير محدد';
-                const afterStatus = task.status?.status || 'غير محدد';
 
-                // تسجيل الحالة للتشخيص
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log('📊 Status Change Detected for task:', task.name);
-                console.log('   Task ID:', task.id);
-                console.log('   Changed by:', updaterName);
-                console.log('   Before:', beforeStatus);
-                console.log('   After (original):', afterStatus);
-                console.log('   After (lowercase):', afterStatus.toLowerCase().trim());
+            case 'assignee':
+                beforeValue = historyItem.before?.username || null;
+                afterValue = historyItem.after?.username || null;
+                console.log('   Assignee Before:', beforeValue || 'لا يوجد');
+                console.log('   Assignee After:', afterValue || 'لا يوجد');
 
-                const normalizedStatus = afterStatus.toLowerCase().trim();
-                const isComplete = NON_OPEN_STATUSES.includes(normalizedStatus);
-
-                console.log('   🔍 Checking if complete...');
-                console.log('   Normalized status:', `"${normalizedStatus}"`);
-                console.log('   Is in NON_OPEN_STATUSES?:', isComplete);
-
-                if (isComplete) {
-                    console.log('   ✅ STATUS IS COMPLETE!');
-                    console.log('   → Sending completion notification...');
-                    await createTaskCompletionNotification(task, updaterName);
-                    console.log('   ✅ Completion notification sent successfully!');
-                } else {
-                    console.log('   ⚠️  Status changed but NOT a completion status');
-                    console.log('   → Adding to status change queue...');
-                    addNotificationToQueue({
-                        type: 'status_changed',
-                        task: task,
-                        data: {
-                            updaterName: updaterName,
-                            before: beforeStatus,
-                            after: afterStatus,
-                            assignees: getAssigneeTags(task)
-                        }
-                    });
+                // إرسال إشعار مباشر للمسؤول الجديد
+                if (afterValue && task.assignees?.length > 0) {
+                    await sendDirectAssignmentNotification(task);
                 }
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
                 break;
-            }
+
+            case 'priority':
+                beforeValue = historyItem.before?.priority;
+                afterValue = task.priority?.priority;
+                console.log('   Priority Before:', beforeValue);
+                console.log('   Priority After:', afterValue);
+                break;
+
+            case 'due_date':
+                beforeValue = historyItem.before?.due_date;
+                afterValue = task.due_date;
+                console.log('   Due Date Before:', beforeValue || 'لا يوجد');
+                console.log('   Due Date After:', afterValue || 'لا يوجد');
+                break;
+
+            case 'description':
+                beforeValue = 'تم التعديل';
+                afterValue = 'وصف جديد';
+                console.log('   Description updated');
+                break;
+
+            case 'name':
+                beforeValue = historyItem.before?.name || 'غير معروف';
+                afterValue = task.name;
+                console.log('   Name Before:', beforeValue);
+                console.log('   Name After:', afterValue);
+                break;
+
             default:
-                console.log(`Minor update skipped: Field '${historyItem.field}' changed on task ${task.id}`);
-                return res.send('Minor update, notification skipped.');
+                beforeValue = JSON.stringify(historyItem.before);
+                afterValue = JSON.stringify(historyItem.after || 'تحديث');
+                console.log('   Generic field update');
         }
+
+        // إرسال للـ AI لتوليد إشعار ذكي
+        console.log('🤖 Sending to AI for smart notification generation...');
+
+        const change = {
+            field: historyItem.field,
+            before: beforeValue,
+            after: afterValue,
+            userName: updaterName
+        };
+
+        await createAISmartNotification(task, change);
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         res.send('ok');
     } catch (err) {
         console.error('Error in /task-updated-webhook:', err.message);
