@@ -25,12 +25,22 @@ const CLICKUP_TOKEN = process.env.CLICKUP_TOKEN || 'pk_62585187_VZCCTKCU9501T8G8
 const CLICKUP_TEAM_ID = process.env.CLICKUP_TEAM_ID || '9015343430';
 const SAMPLE_LIST_ID = process.env.CLICKUP_LIST_ID || '901515500888';
 
+// حالات المهام المكتملة
+// ملاحظة: ClickUp يرسل الحالات بحروف كبيرة (COMPLETE)
+// لكن الكود يحولها لحروف صغيرة قبل المقارنة (.toLowerCase())
 const NON_OPEN_STATUSES = [
     'complete',
+    'completed',
     'complete & not invoiced',
     'closed',
     'canceled',
-    'cancelled'
+    'cancelled',
+    'done',
+    'finished',
+    'مكتمل',
+    'منتهي',
+    'مغلق',
+    'ملغي'
 ];
 
 const PROMPTS_FILE = path.join(__dirname, 'prompts.txt');
