@@ -1,0 +1,43 @@
+{
+  "name": "clikup-motivation-system",
+  "version": "3.0.0",
+  "description": "نظام تحفيز متقدم لإدارة المهام مع ClickUp و WhatsApp و AI - Enhanced ClickUp motivation system with WhatsApp notifications and AI-powered coaching",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "clickup",
+    "whatsapp",
+    "motivation",
+    "ai",
+    "claude",
+    "productivity",
+    "task-management",
+    "automation",
+    "notifications",
+    "gamification",
+    "badges",
+    "challenges",
+    "arabic"
+  ],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.25.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
