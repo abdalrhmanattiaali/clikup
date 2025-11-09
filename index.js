@@ -12,12 +12,12 @@ const fs = require('fs').promises;
 const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 
 // ========================= Configuration ========================= //
 const CONFIG = {
     // API Keys
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     CLICKUP_TOKEN: process.env.CLICKUP_TOKEN || 'pk_62585187_VZCCTKCU9501T8G8KJHVGT9FSXPVTU11',
     CLICKUP_TEAM_ID: process.env.CLICKUP_TEAM_ID || '9015343430',
     CLICKUP_LIST_ID: process.env.CLICKUP_LIST_ID || '901515500888',
@@ -41,11 +41,11 @@ const CONFIG = {
 // ========================= Global Variables ========================= //
 let whatsappClient = null;
 let GROUP_CHAT_ID = null;
-let anthropicClient = null;
+let openaiClient = null;
 
-// Initialize Anthropic if API key exists
-if (CONFIG.ANTHROPIC_API_KEY && CONFIG.ANTHROPIC_API_KEY !== 'sk-ant-api03-your-key-here') {
-    anthropicClient = new Anthropic({ apiKey: CONFIG.ANTHROPIC_API_KEY });
+// Initialize OpenAI if API key exists
+if (CONFIG.OPENAI_API_KEY && CONFIG.OPENAI_API_KEY.startsWith('sk-')) {
+    openaiClient = new OpenAI({ apiKey: CONFIG.OPENAI_API_KEY });
 }
 
 // ========================= Express Setup ========================= //
@@ -139,23 +139,32 @@ async function sendWhatsAppMessage(chatId, message) {
 // ========================= AI Notification System ========================= //
 async function generateAINotification(task, change) {
     // If AI not available, use simple notification
-    if (!anthropicClient) {
+    if (!openaiClient) {
         return generateSimpleNotification(task, change);
     }
 
     try {
-        console.log('🤖 Generating AI notification...');
+        console.log('🤖 Generating AI notification with ChatGPT...');
 
         const prompt = buildAIPrompt(task, change);
 
-        const message = await anthropicClient.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+        const completion = await openaiClient.chat.completions.create({
+            model: 'gpt-4-turbo-preview',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'أنت مساعد ذكي لفريق عمل. تكتب إشعارات واضحة ومختصرة بالعربية.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
             max_tokens: 500,
             temperature: 0.7,
-            messages: [{ role: 'user', content: prompt }]
         });
 
-        const notification = message.content[0].text.trim();
+        const notification = completion.choices[0].message.content.trim();
         console.log('✅ AI notification generated');
 
         return notification;
@@ -333,16 +342,25 @@ app.post('/task-updated-webhook', async (req, res) => {
         console.log('📥 Webhook received from ClickUp');
 
         const body = req.body;
-        const taskId = body.task_id || body.payload?.id;
-        const historyItem = body.history_items?.[0];
 
-        console.log('   Task ID:', taskId);
-        console.log('   Has history_items:', !!historyItem);
+        // Extract task ID (support multiple formats)
+        const taskId = body.task_id || body.payload?.id || body.data?.id;
+
+        // Extract history_items (the official documentation shows this is the key field)
+        const historyItems = body.history_items || [];
+        const historyItem = historyItems[0];
+
+        console.log('🔍 Webhook data:');
         console.log('   Event:', body.event);
+        console.log('   Task ID:', taskId);
+        console.log('   History items count:', historyItems.length);
+        console.log('   Webhook ID:', body.webhook_id);
 
-        // Handle case where there's no history_items (automation webhook)
-        if (!historyItem) {
-            console.log('⚠️  No history_items - skipping (this is likely an automation webhook)');
+        // Handle case where there's no history_items (automation webhook or task creation)
+        if (!historyItem || historyItems.length === 0) {
+            console.log('⚠️  No history_items found');
+            console.log('   This is likely an automation webhook or task creation event');
+            console.log('   For task updates, please use the "Task Status Updated" webhook type in ClickUp');
             return res.send('ok - no history items');
         }
 
@@ -355,40 +373,67 @@ app.post('/task-updated-webhook', async (req, res) => {
 
         console.log('✅ Task found:', task.name);
 
-        // Extract change information
-        const userName = historyItem.user?.username || 'Unknown';
+        // Extract user information (ClickUp documentation shows user.id is integer, not string)
+        const userName = historyItem.user?.username || historyItem.user?.email || 'أحد الأعضاء';
+        const userId = historyItem.user?.id;
         const field = historyItem.field;
+
+        console.log('👤 User info:');
+        console.log('   Name:', userName);
+        console.log('   ID:', userId);
+        console.log('   Field changed:', field);
 
         let beforeValue, afterValue;
 
-        // Extract values based on field type
+        // Extract values based on field type (based on official ClickUp webhook documentation)
         switch (field) {
             case 'status':
-                beforeValue = historyItem.before?.status || 'غير محدد';
-                afterValue = historyItem.after?.status || task.status?.status || 'غير محدد';
+            case 'status_type':
+                // For status changes, before/after contain status objects
+                beforeValue = historyItem.before?.status || historyItem.before?.type || 'غير محدد';
+                afterValue = historyItem.after?.status || historyItem.after?.type || task.status?.status || 'غير محدد';
                 break;
+
             case 'assignee':
-                beforeValue = historyItem.before?.username;
-                afterValue = historyItem.after?.username;
+            case 'assignee_add':
+            case 'assignee_rem':
+                // For assignee changes
+                beforeValue = historyItem.before?.username || historyItem.before?.email;
+                afterValue = historyItem.after?.username || historyItem.after?.email;
                 break;
+
             case 'priority':
-                beforeValue = historyItem.before?.priority;
-                afterValue = historyItem.after?.priority || task.priority?.priority;
+                // Priority can be in different formats
+                beforeValue = historyItem.before?.priority || historyItem.before?.orderindex;
+                afterValue = historyItem.after?.priority || historyItem.after?.orderindex || task.priority?.priority;
                 break;
+
             case 'due_date':
-                beforeValue = historyItem.before?.due_date;
-                afterValue = historyItem.after?.due_date || task.due_date;
+            case 'time_estimate':
+                beforeValue = historyItem.before?.due_date || historyItem.before;
+                afterValue = historyItem.after?.due_date || historyItem.after || task.due_date;
                 break;
+
+            case 'description':
+            case 'content':
+                beforeValue = historyItem.before?.description || historyItem.before;
+                afterValue = historyItem.after?.description || historyItem.after;
+                break;
+
             default:
-                beforeValue = JSON.stringify(historyItem.before);
-                afterValue = JSON.stringify(historyItem.after);
+                // For other fields, try to extract data property or use the whole object
+                beforeValue = historyItem.before?.data || historyItem.before || 'غير محدد';
+                afterValue = historyItem.after?.data || historyItem.after || 'غير محدد';
+
+                // If objects, stringify them
+                if (typeof beforeValue === 'object') beforeValue = JSON.stringify(beforeValue);
+                if (typeof afterValue === 'object') afterValue = JSON.stringify(afterValue);
         }
 
-        console.log('📊 Change detected:');
+        console.log('📊 Change details:');
         console.log('   Field:', field);
         console.log('   Before:', beforeValue);
         console.log('   After:', afterValue);
-        console.log('   By:', userName);
 
         // Generate AI notification
         const change = { field, before: beforeValue, after: afterValue, userName };
@@ -407,10 +452,12 @@ app.post('/task-updated-webhook', async (req, res) => {
             type: `task_${field}_changed`,
             taskId: task.id,
             taskName: task.name,
-            userId: userName,
+            userId: userId || userName,
+            userName: userName,
             field: field,
             before: beforeValue,
-            after: afterValue
+            after: afterValue,
+            webhookEvent: body.event
         });
 
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -418,6 +465,7 @@ app.post('/task-updated-webhook', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error in webhook:', error.message);
+        console.error('   Stack:', error.stack);
         res.status(500).send('Error');
     }
 });
@@ -602,12 +650,13 @@ initializeWhatsApp();
 app.listen(CONFIG.PORT, '0.0.0.0', () => {
     console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
     console.log('║              ClickUp WhatsApp AI Notification System                      ║');
+    console.log('║                    Powered by OpenAI GPT-4 Turbo                          ║');
     console.log('╚═══════════════════════════════════════════════════════════════════════════╝');
     console.log('');
     console.log(`🚀 Server running on: http://0.0.0.0:${CONFIG.PORT}`);
     console.log('');
     console.log('Features:');
-    console.log(`   🤖 AI Notifications: ${anthropicClient ? '✅ Enabled' : '❌ Disabled'}`);
+    console.log(`   🤖 AI Notifications (GPT-4): ${openaiClient ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`   💪 Motivation: ${CONFIG.ENABLE_MOTIVATION ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`   📊 Analytics: ${CONFIG.ENABLE_ANALYTICS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log('');
