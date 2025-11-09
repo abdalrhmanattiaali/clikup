@@ -1425,16 +1425,38 @@ app.post('/task-updated-webhook', async (req, res) => {
         console.log('📥 Webhook received from ClickUp');
         console.log('   Content-Type:', req.headers['content-type']);
         console.log('   Body type:', typeof req.body);
-        console.log('   Body:', JSON.stringify(req.body, null, 2).substring(0, 500));
+        console.log('   Full Body:', JSON.stringify(req.body, null, 2));
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         const body = req.body;
         const taskId = body.task_id || body.payload?.id;
         const historyItem = body.history_items?.[0];
 
+        console.log('🔍 Extracted data:');
+        console.log('   task_id:', taskId);
+        console.log('   has history_items:', !!body.history_items);
+        console.log('   history_items length:', body.history_items?.length || 0);
+        console.log('   event type:', body.event);
+
+        if (!taskId) {
+            console.log('❌ No task_id found in webhook');
+            return res.status(400).send('No task_id');
+        }
+
         const task = await getTaskDetails(taskId);
-        if (!task) return res.status(404).send('Task not found.');
-        if (!historyItem) return res.send('ok (no history item)');
+        if (!task) {
+            console.log('❌ Task not found:', taskId);
+            return res.status(404).send('Task not found.');
+        }
+
+        console.log('✅ Task found:', task.name);
+
+        if (!historyItem) {
+            console.log('⚠️  No history_items in webhook');
+            console.log('   This might be an automation trigger or different webhook type');
+            console.log('   Webhook event:', body.event || 'undefined');
+            return res.send('ok (no history item)');
+        }
 
         const updaterName = historyItem.user?.username || 'غير معروف';
 
